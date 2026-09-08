@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NOVA 3D Studio - AI & Procedural Mesh Generator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        studio: {
+                            900: '#0b0f17',
+                            800: '#131924',
+                            700: '#1e2638',
+                            600: '#2a354d',
+                            accent: '#6366f1',
+                            accentHover: '#4f46e5',
+                            neonCyan: '#06b6d4',
+                            neonPurple: '#a855f7'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Three.js and Exporters -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/OBJExporter.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+
+    <style>
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #131924;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a354d;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #6366f1;
+        }
+        
+        .glass-panel {
+            background: rgba(19, 25, 36, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .canvas-extrude {
+            touch-action: none;
+            cursor: crosshair;
+        }
+    </style>
+</head>
+<body class="bg-studio-900 text-slate-100 h-screen w-screen overflow-hidden flex flex-col font-sans">
+
+    <!-- Header Navigation -->
+    <header class="h-14 border-b border-slate-800 bg-studio-800/80 backdrop-blur px-4 flex items-center justify-between z-20 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-gradient-to-tr from-indigo-600 to-purple-600 rounded-lg shadow-lg shadow-indigo-500/30">
+                <i data-lucide="box" class="w-5 h-5 text-white"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-base tracking-wide bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">NOVA 3D Studio</h1>
+                <p class="text-[10px] text-indigo-400 font-medium">AI & Procedural Mesh Generator</p>
+            </div>
+        </div>
+
+        <!-- Viewport Stats Badge -->
+        <div class="hidden md:flex items-center space-x-4 bg-studio-900/80 px-3 py-1 rounded-full border border-slate-700/50 text-xs">
+            <div class="flex items-center space-x-1.5 text-slate-400">
+                <i data-lucide="layers" class="w-3.5 h-3.5 text-indigo-400"></i>
+                <span>Polys: <strong id="stat-polys" class="text-slate-200 font-mono">0</strong></span>
+            </div>
+            <div class="h-3 w-[1px] bg-slate-700"></div>
+            <div class="flex items-center space-x-1.5 text-slate-400">
+                <i data-lucide="dot" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Verts: <strong id="stat-verts" class="text-slate-200 font-mono">0</strong></span>
+            </div>
+            <div class="h-3 w-[1px] bg-slate-700"></div>
+            <div class="flex items-center space-x-1.5 text-slate-400">
+                <i data-lucide="gauge" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span>FPS: <strong id="stat-fps" class="text-slate-200 font-mono">60</strong></span>
+            </div>
+        </div>
+
+        <!-- Header Actions -->
+        <div class="flex items-center space-x-2">
+            <button id="btn-export-obj" class="px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-100 rounded-md transition flex items-center space-x-1.5 border border-slate-600/50">
+                <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                <span>OBJ</span>
+            </button>
+            <button id="btn-export-stl" class="px-3 py-1.5 text-xs font-medium bg-slate-700 hover:bg-slate-600 text-slate-100 rounded-md transition flex items-center space-x-1.5 border border-slate-600/50">
+                <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+                <span>STL</span>
+            </button>
+            <button id="btn-screenshot" class="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white rounded-md transition shadow-md shadow-indigo-600/20 flex items-center space-x-1.5">
+                <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">Capture</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- Left Tool Drawer Tabs -->
+        <div class="w-14 bg-studio-800 border-r border-slate-800 flex flex-col items-center py-3 space-y-4 shrink-0 z-10">
+            <button data-tab="tab-ai" class="tool-tab p-2.5 rounded-xl text-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 transition relative group" title="AI Generator">
+                <i data-lucide="sparkles" class="w-5 h-5"></i>
+                <span class="absolute left-16 bg-slate-900 text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition whitespace-nowrap z-30">AI Generator</span>
+            </button>
+            <button data-tab="tab-procedural" class="tool-tab p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50 transition relative group" title="Procedural Builder">
+                <i data-lucide="cpu" class="w-5 h-5"></i>
+                <span class="absolute left-16 bg-slate-900 text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition whitespace-nowrap z-30">Procedural Suite</span>
+            </button>
+            <button data-tab="tab-draw" class="tool-tab p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50 transition relative group" title="2D Sketch Extruder">
+                <i data-lucide="pen-tool" class="w-5 h-5"></i>
+                <span class="absolute left-16 bg-slate-900 text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition whitespace-nowrap z-30">2D to 3D Sketch</span>
+            </button>
+            <button data-tab="tab-material" class="tool-tab p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50 transition relative group" title="Material Editor">
+                <i data-lucide="palette" class="w-5 h-5"></i>
+                <span class="absolute left-16 bg-slate-900 text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition whitespace-nowrap z-30">Materials & Shaders</span>
+            </button>
+            <button data-tab="tab-lighting" class="tool-tab p-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700/50 transition relative group" title="Studio Lighting">
+                <i data-lucide="sun" class="w-5 h-5"></i>
+                <span class="absolute left-16 bg-slate-900 text-xs px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none transition whitespace-nowrap z-30">Studio Environment</span>
+            </button>
+        </div>
+
+        <!-- Left Tool Drawer Content Panel -->
+        <div id="drawer-content" class="w-80 bg-studio-800/90 border-r border-slate-800 flex flex-col shrink-0 z-10 glass-panel overflow-y-auto">
+            
+            <!-- TAB 1: AI Generator -->
+            <div id="tab-ai" class="tab-panel p-4 space-y-5">
+                <div class="border-b border-slate-700/60 pb-3">
+                    <h2 class="text-sm font-semibold flex items-center space-x-2 text-white">
+                        <i data-lucide="wand-2" class="w-4 h-4 text-indigo-400"></i>
+                        <span>AI Text-to-3D Synthesizer</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">Describe any 3D asset or scene to generate geometry via Gemini 2.5 AI.</p>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="text-xs font-medium text-slate-300 block">Prompt</label>
+                    <textarea id="ai-prompt" rows="3" class="w-full bg-studio-900/90 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition resize-none" placeholder="e.g., A low-poly medieval tower with a spiral staircase, wooden door, and stone battlements..."></textarea>
+                    
+                    <!-- Presets -->
+                    <div>
+                        <span class="text-[11px] text-slate-400 block mb-1.5">Try Prompts:</span>
+                        <div class="flex flex-wrap gap-1.5">
+                            <button class="prompt-tag text-[10px] bg-slate-700/60 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-600/40 text-slate-300 px-2 py-1 rounded transition">Sci-Fi Battle Cruiser</button>
+                            <button class="prompt-tag text-[10px] bg-slate-700/60 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-600/40 text-slate-300 px-2 py-1 rounded transition">Fantasy Magic Crystal</button>
+                            <button class="prompt-tag text-[10px] bg-slate-700/60 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-600/40 text-slate-300 px-2 py-1 rounded transition">Cyberpunk Combat Mech</button>
+                            <button class="prompt-tag text-[10px] bg-slate-700/60 hover:bg-indigo-600/30 hover:border-indigo-500/50 border border-slate-600/40 text-slate-300 px-2 py-1 rounded transition">Low-Poly Pine Tree</button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 pt-1">
+                        <label class="text-xs font-medium text-slate-300 block">Style Target</label>
+                        <select id="ai-style" class="w-full bg-studio-900 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                            <option value="lowpoly">Low-Poly Stylized</option>
+                            <option value="scifi">High-Tech / Sci-Fi Parametric</option>
+                            <option value="architectural">Architectural Structure</option>
+                            <option value="organic">Organic / Smooth Form</option>
+                        </select>
+                    </div>
+
+                    <button id="btn-generate-ai" class="w-full py-2.5 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-medium text-xs rounded-lg transition shadow-lg shadow-indigo-500/25 flex items-center justify-center space-x-2 group">
+                        <i data-lucide="sparkles" class="w-4 h-4 group-hover:rotate-12 transition-transform"></i>
+                        <span>Generate 3D Asset</span>
+                    </button>
+                </div>
+
+                <!-- AI Status Notification -->
+                <div id="ai-status-card" class="hidden p-3 rounded-lg bg-indigo-950/40 border border-indigo-800/50 text-xs space-y-2">
+                    <div class="flex items-center space-x-2 text-indigo-300">
+                        <div class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></div>
+                        <span id="ai-status-text" class="font-medium">Synthesizing 3D Geometry...</span>
+                    </div>
+                    <p id="ai-status-sub" class="text-[11px] text-indigo-300/70">Communicating with Gemini AI pipeline...</p>
+                </div>
+            </div>
+
+            <!-- TAB 2: Procedural Generators -->
+            <div id="tab-procedural" class="tab-panel hidden p-4 space-y-5">
+                <div class="border-b border-slate-700/60 pb-3">
+                    <h2 class="text-sm font-semibold flex items-center space-x-2 text-white">
+                        <i data-lucide="cpu" class="w-4 h-4 text-cyan-400"></i>
+                        <span>Procedural Generator Engines</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">Generate complex 3D meshes instantly offline using algorithmic seeds.</p>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <button data-proc="spaceship" class="proc-btn flex flex-col items-center justify-center p-3 bg-studio-900 hover:bg-slate-700/50 border border-slate-700 hover:border-indigo-500 rounded-xl transition text-center group">
+                            <i data-lucide="rocket" class="w-6 h-6 text-indigo-400 mb-1 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-xs font-medium text-slate-200">Sci-Fi Vessel</span>
+                        </button>
+                        <button data-proc="mech" class="proc-btn flex flex-col items-center justify-center p-3 bg-studio-900 hover:bg-slate-700/50 border border-slate-700 hover:border-cyan-500 rounded-xl transition text-center group">
+                            <i data-lucide="bot" class="w-6 h-6 text-cyan-400 mb-1 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-xs font-medium text-slate-200">Robot / Mech</span>
+                        </button>
+                        <button data-proc="tree" class="proc-btn flex flex-col items-center justify-center p-3 bg-studio-900 hover:bg-slate-700/50 border border-slate-700 hover:border-emerald-500 rounded-xl transition text-center group">
+                            <i data-lucide="trees" class="w-6 h-6 text-emerald-400 mb-1 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-xs font-medium text-slate-200">Procedural Tree</span>
+                        </button>
+                        <button data-proc="crystal" class="proc-btn flex flex-col items-center justify-center p-3 bg-studio-900 hover:bg-slate-700/50 border border-slate-700 hover:border-purple-500 rounded-xl transition text-center group">
+                            <i data-lucide="gem" class="w-6 h-6 text-purple-400 mb-1 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-xs font-medium text-slate-200">Crystal Cluster</span>
+                        </button>
+                        <button data-proc="city" class="proc-btn flex flex-col items-center justify-center p-3 bg-studio-900 hover:bg-slate-700/50 border border-slate-700 hover:border-amber-500 rounded-xl transition text-center group">
+                            <i data-lucide="building-2" class="w-6 h-6 text-amber-400 mb-1 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-xs font-medium text-slate-200">Cyber City</span>
+                        </button>
+                        <button data-proc="terrain" class="proc-btn flex flex-col items-center justify-center p-3 bg-studio-900 hover:bg-slate-700/50 border border-slate-700 hover:border-rose-500 rounded-xl transition text-center group">
+                            <i data-lucide="mountain" class="w-6 h-6 text-rose-400 mb-1 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-xs font-medium text-slate-200">3D Terrain</span>
+                        </button>
+                    </div>
+
+                    <!-- Seed & Subdivisions -->
+                    <div class="p-3 bg-studio-900/60 rounded-xl border border-slate-800 space-y-3 mt-2">
+                        <div class="flex items-center justify-between">
+                            <label class="text-xs text-slate-300">Random Seed</label>
+                            <button id="btn-random-seed" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center space-x-1">
+                                <i data-lucide="shuffle" class="w-3 h-3"></i>
+                                <span>Mutate</span>
+                            </button>
+                        </div>
+                        <input id="proc-seed" type="number" value="1337" class="w-full bg-studio-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 font-mono">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: 2D Sketch Extruder -->
+            <div id="tab-draw" class="tab-panel hidden p-4 space-y-4">
+                <div class="border-b border-slate-700/60 pb-3">
+                    <h2 class="text-sm font-semibold flex items-center space-x-2 text-white">
+                        <i data-lucide="pen-tool" class="w-4 h-4 text-pink-400"></i>
+                        <span>2D Sketch to 3D Extruder</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">Draw a 2D silhouette or heightmap to generate an extruded 3D mesh.</p>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-300">Draw Silhouette</span>
+                        <button id="btn-clear-canvas" class="text-[11px] text-rose-400 hover:text-rose-300">Clear Canvas</button>
+                    </div>
+
+                    <div class="relative bg-slate-950 border border-slate-700 rounded-xl overflow-hidden flex justify-center items-center">
+                        <canvas id="sketch-canvas" width="240" height="200" class="canvas-extrude bg-slate-950"></canvas>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs text-slate-300">
+                            <span>Extrusion Depth</span>
+                            <span id="extrude-depth-val" class="text-indigo-400">1.5</span>
+                        </div>
+                        <input id="extrude-depth" type="range" min="0.2" max="5" step="0.1" value="1.5" class="w-full accent-indigo-500">
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex justify-between text-xs text-slate-300">
+                            <span>Bevel Thickness</span>
+                            <span id="extrude-bevel-val" class="text-indigo-400">0.2</span>
+                        </div>
+                        <input id="extrude-bevel" type="range" min="0" max="0.8" step="0.05" value="0.2" class="w-full accent-indigo-500">
+                    </div>
+
+                    <button id="btn-extrude-mesh" class="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-lg transition shadow flex items-center justify-center space-x-2">
+                        <i data-lucide="box" class="w-4 h-4"></i>
+                        <span>Generate Extruded Mesh</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB 4: Material Editor -->
+            <div id="tab-material" class="tab-panel hidden p-4 space-y-4">
+                <div class="border-b border-slate-700/60 pb-3">
+                    <h2 class="text-sm font-semibold flex items-center space-x-2 text-white">
+                        <i data-lucide="palette" class="w-4 h-4 text-purple-400"></i>
+                        <span>PBR Material & Shading</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">Customize surface properties, colors, roughness, and shaders.</p>
+                </div>
+
+                <!-- Presets -->
+                <div class="space-y-2">
+                    <label class="text-xs font-medium text-slate-300">Material Presets</label>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <button data-mat="gold" class="mat-preset text-[11px] p-1.5 bg-amber-500/10 border border-amber-500/40 text-amber-300 rounded hover:bg-amber-500/20">Gold Metal</button>
+                        <button data-mat="chrome" class="mat-preset text-[11px] p-1.5 bg-slate-300/10 border border-slate-400/40 text-slate-200 rounded hover:bg-slate-300/20">Chrome</button>
+                        <button data-mat="hologram" class="mat-preset text-[11px] p-1.5 bg-cyan-500/10 border border-cyan-500/40 text-cyan-300 rounded hover:bg-cyan-500/20">Hologram</button>
+                        <button data-mat="clay" class="mat-preset text-[11px] p-1.5 bg-rose-500/10 border border-rose-500/40 text-rose-300 rounded hover:bg-rose-500/20">Matte Clay</button>
+                        <button data-mat="glass" class="mat-preset text-[11px] p-1.5 bg-blue-500/10 border border-blue-400/40 text-blue-300 rounded hover:bg-blue-500/20">Glass</button>
+                        <button data-mat="obsidian" class="mat-preset text-[11px] p-1.5 bg-purple-500/10 border border-purple-500/40 text-purple-300 rounded hover:bg-purple-500/20">Obsidian</button>
+                    </div>
+                </div>
+
+                <div class="space-y-3 pt-2">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs text-slate-300">Base Color</label>
+                        <input id="mat-color" type="color" value="#6366f1" class="w-8 h-8 rounded border-none bg-transparent cursor-pointer">
+                    </div>
+
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs text-slate-300">
+                            <span>Roughness</span>
+                            <span id="mat-roughness-val" class="text-indigo-400">0.30</span>
+                        </div>
+                        <input id="mat-roughness" type="range" min="0" max="1" step="0.05" value="0.30" class="w-full accent-indigo-500">
+                    </div>
+
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs text-slate-300">
+                            <span>Metalness</span>
+                            <span id="mat-metalness-val" class="text-indigo-400">0.50</span>
+                        </div>
+                        <input id="mat-metalness" type="range" min="0" max="1" step="0.05" value="0.50" class="w-full accent-indigo-500">
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-700/50">
+                        <label class="text-xs text-slate-300">Wireframe Display</label>
+                        <input id="mat-wireframe" type="checkbox" class="w-4 h-4 accent-indigo-500 rounded">
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs text-slate-300">Flat Shading (Low-Poly)</label>
+                        <input id="mat-flatshading" type="checkbox" checked class="w-4 h-4 accent-indigo-500 rounded">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 5: Studio Environment -->
+            <div id="tab-lighting" class="tab-panel hidden p-4 space-y-4">
+                <div class="border-b border-slate-700/60 pb-3">
+                    <h2 class="text-sm font-semibold flex items-center space-x-2 text-white">
+                        <i data-lucide="sun" class="w-4 h-4 text-amber-400"></i>
+                        <span>Lighting & Environment</span>
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1">Configure viewport illumination rigs and background stage.</p>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="text-xs font-medium text-slate-300 block">Lighting Setup</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button data-env="studio" class="env-btn p-2 bg-studio-900 border border-slate-700 rounded-lg text-xs text-slate-200 hover:border-indigo-500 flex items-center space-x-2">
+                            <i data-lucide="sun-medium" class="w-4 h-4 text-amber-400"></i>
+                            <span>3-Point Studio</span>
+                        </button>
+                        <button data-env="cyber" class="env-btn p-2 bg-studio-900 border border-slate-700 rounded-lg text-xs text-slate-200 hover:border-indigo-500 flex items-center space-x-2">
+                            <i data-lucide="zap" class="w-4 h-4 text-cyan-400"></i>
+                            <span>Cyber Neon</span>
+                        </button>
+                        <button data-env="sunset" class="env-btn p-2 bg-studio-900 border border-slate-700 rounded-lg text-xs text-slate-200 hover:border-indigo-500 flex items-center space-x-2">
+                            <i data-lucide="sunset" class="w-4 h-4 text-rose-400"></i>
+                            <span>Warm Sunset</span>
+                        </button>
+                        <button data-env="dramatic" class="env-btn p-2 bg-studio-900 border border-slate-700 rounded-lg text-xs text-slate-200 hover:border-indigo-500 flex items-center space-x-2">
+                            <i data-lucide="moon" class="w-4 h-4 text-purple-400"></i>
+                            <span>Dramatic Spotlight</span>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-700/50">
+                        <label class="text-xs text-slate-300">Ground Grid</label>
+                        <input id="env-grid" type="checkbox" checked class="w-4 h-4 accent-indigo-500 rounded">
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs text-slate-300">Shadow Reflections</label>
+                        <input id="env-shadows" type="checkbox" checked class="w-4 h-4 accent-indigo-500 rounded">
+                    </div>
+
+                    <div class="space-y-1 pt-2">
+                        <div class="flex justify-between text-xs text-slate-300">
+                            <span>Light Intensity</span>
+                            <span id="env-intensity-val" class="text-indigo-400">1.2</span>
+                        </div>
+                        <input id="env-intensity" type="range" min="0.2" max="3" step="0.1" value="1.2" class="w-full accent-indigo-500">
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Center Interactive 3D Viewport -->
+        <div class="flex-1 relative bg-gradient-to-b from-slate-950 via-studio-900 to-slate-950 flex items-center justify-center overflow-hidden">
+            
+            <!-- ThreeJS Canvas Container -->
+            <div id="viewport-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+            <!-- Floating Viewport Controls -->
+            <div class="absolute top-4 left-4 flex flex-col space-y-2 z-10">
+                <button id="btn-view-reset" class="p-2 bg-studio-800/80 hover:bg-studio-700 border border-slate-700/60 rounded-lg text-slate-300 hover:text-white backdrop-blur transition shadow-lg" title="Reset Camera View">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+                <button id="btn-toggle-wireframe" class="p-2 bg-studio-800/80 hover:bg-studio-700 border border-slate-700/60 rounded-lg text-slate-300 hover:text-white backdrop-blur transition shadow-lg" title="Toggle Wireframe">
+                    <i data-lucide="grid" class="w-4 h-4"></i>
+                </button>
+                <button id="btn-auto-rotate" class="p-2 bg-studio-800/80 hover:bg-studio-700 border border-slate-700/60 rounded-lg text-slate-300 hover:text-white backdrop-blur transition shadow-lg" title="Toggle Turntable Rotation">
+                    <i data-lucide="disc" class="w-4 h-4 text-indigo-400"></i>
+                </button>
+            </div>
+
+            <!-- Floating Perspective Camera Cubes / Quick Views -->
+            <div class="absolute top-4 right-4 flex space-x-1.5 z-10 bg-studio-800/80 p-1 border border-slate-700/60 rounded-lg backdrop-blur">
+                <button data-cam="front" class="cam-btn text-[10px] px-2 py-1 font-mono hover:bg-indigo-600/40 rounded text-slate-300">FRONT</button>
+                <button data-cam="top" class="cam-btn text-[10px] px-2 py-1 font-mono hover:bg-indigo-600/40 rounded text-slate-300">TOP</button>
+                <button data-cam="iso" class="cam-btn text-[10px] px-2 py-1 font-mono bg-indigo-600/50 text-white rounded">ISO</button>
+            </div>
+
+            <!-- Interactive Model Inspector / Transform Controls (Bottom Overlay) -->
+            <div class="absolute bottom-4 left-1/2 -translate-x-1/2 glass-panel border border-slate-700/60 rounded-2xl px-5 py-2.5 flex items-center space-x-6 z-10 shadow-2xl">
+                <!-- Scale -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-slate-400 font-mono">Scale:</span>
+                    <input id="transform-scale" type="range" min="0.2" max="3" step="0.1" value="1" class="w-20 accent-indigo-500">
+                    <span id="transform-scale-val" class="text-xs text-indigo-400 font-mono w-8">1.0x</span>
+                </div>
+                <div class="h-4 w-[1px] bg-slate-700"></div>
+                <!-- Rotation Y -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-slate-400 font-mono">Spin Y:</span>
+                    <input id="transform-rot-y" type="range" min="0" max="360" value="0" class="w-24 accent-indigo-500">
+                </div>
+                <div class="h-4 w-[1px] bg-slate-700"></div>
+                <!-- Position Y Offset -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-slate-400 font-mono">Height:</span>
+                    <input id="transform-pos-y" type="range" min="-2" max="4" step="0.1" value="0" class="w-20 accent-indigo-500">
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Notification Toast System -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- MAIN STUDIO JAVASCRIPT LOGIC -->
+    <script>
+        // API Key initialized as empty string according to security guidelines
+        const apiKey = "";
+
+        // Application State
+        const state = {
+            currentTab: 'tab-ai',
+            currentModelGroup: null,
+            autoRotate: false,
+            meshStats: { polys: 0, verts: 0 },
+            materialProps: {
+                color: '#6366f1',
+                roughness: 0.3,
+                metalness: 0.5,
+                wireframe: false,
+                flatShading: true
+            },
+            seed: 1337
+        };
+
+        // Three.js Core Variables
+        let scene, camera, renderer, controls;
+        let currentMeshGroup;
+        let gridHelper;
+        let ambientLight, mainLight, fillLight, backLight;
+        let lastFrameTime = performance.now();
+        let frameCount = 0;
+
+        // --- 1. INITIALIZATION & THREE.JS SETUP ---
+        window.addEventListener('DOMContentLoaded', () => {
+            initLucideIcons();
+            initThreeJS();
+            initDrawingCanvas();
+            initUIListeners();
+            
+            // Build default initial 3D asset (Sci-fi vessel)
+            generateProceduralAsset('spaceship');
+            
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+        });
+
+        function initLucideIcons() {
+            if (window.lucide) {
+                lucide.createIcons();
+            }
+        }
+
+        function initThreeJS() {
+            const container = document.getElementById('viewport-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0f17);
+            scene.fog = new THREE.FogExp2(0x0b0f17, 0.03);
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+            camera.position.set(5, 4, 7);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+
+            container.appendChild(renderer.domElement);
+
+            // Orbit Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 + 0.05; // don't go far under ground
+            controls.target.set(0, 1, 0);
+
+            // Ground Grid Helper
+            gridHelper = new THREE.GridHelper(20, 20, 0x6366f1, 0x1e2638);
+            gridHelper.position.y = 0;
+            scene.add(gridHelper);
+
+            // Setup Default Lighting (3-Point Studio)
+            setupStudioLighting();
+
+            // Main Mesh Group Container
+            currentMeshGroup = new THREE.Group();
+            scene.add(currentMeshGroup);
+
+            // Start Animation Render Loop
+            animate();
+        }
+
+        function setupStudioLighting() {
+            if (ambientLight) scene.remove(ambientLight);
+            if (mainLight) scene.remove(mainLight);
+            if (fillLight) scene.remove(fillLight);
+            if (backLight) scene.remove(backLight);
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            // Key Light
+            mainLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            mainLight.position.set(6, 10, 8);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 2048;
+            mainLight.shadow.mapSize.height = 2048;
+            mainLight.shadow.bias = -0.0001;
+            scene.add(mainLight);
+
+            // Fill Light
+            fillLight = new THREE.DirectionalLight(0x818cf8, 0.5);
+            fillLight.position.set(-8, 4, -4);
+            scene.add(fillLight);
+
+            // Rim/Back Light
+            backLight = new THREE.DirectionalLight(0xc084fc, 0.8);
+            backLight.position.set(0, 8, -8);
+            scene.add(backLight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // FPS Counter
+            frameCount++;
+            const now = performance.now();
+            if (now - lastFrameTime >= 1000) {
+                document.getElementById('stat-fps').textContent = frameCount;
+                frameCount = 0;
+                lastFrameTime = now;
+            }
+
+            // Auto Turntable Rotation
+            if (state.autoRotate && currentMeshGroup) {
+                currentMeshGroup.rotation.y += 0.008;
+                document.getElementById('transform-rot-y').value = (currentMeshGroup.rotation.y * 180 / Math.PI) % 360;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('viewport-container');
+            if (!container) return;
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        // --- 2. MATERIAL & STATS MANAGEMENT ---
+        function getActiveMaterial() {
+            return new THREE.MeshStandardMaterial({
+                color: new THREE.Color(state.materialProps.color),
+                roughness: state.materialProps.roughness,
+                metalness: state.materialProps.metalness,
+                wireframe: state.materialProps.wireframe,
+                flatShading: state.materialProps.flatShading
+            });
+        }
+
+        function updateSceneMaterials() {
+            if (!currentMeshGroup) return;
+            
+            currentMeshGroup.traverse((child) => {
+                if (child.isMesh) {
+                    child.material.color.set(state.materialProps.color);
+                    child.material.roughness = state.materialProps.roughness;
+                    child.material.metalness = state.materialProps.metalness;
+                    child.material.wireframe = state.materialProps.wireframe;
+                    child.material.flatShading = state.materialProps.flatShading;
+                    child.material.needsUpdate = true;
+                }
+            });
+        }
+
+        function recalculateMeshStats() {
+            let polys = 0;
+            let verts = 0;
+
+            if (currentMeshGroup) {
+                currentMeshGroup.traverse((child) => {
+                    if (child.isMesh && child.geometry) {
+                        const geom = child.geometry;
+                        if (geom.index) {
+                            polys += geom.index.count / 3;
+                        } else if (geom.attributes.position) {
+                            polys += geom.attributes.position.count / 3;
+                        }
+                        if (geom.attributes.position) {
+                            verts += geom.attributes.position.count;
+                        }
+                    }
+                });
+            }
+
+            document.getElementById('stat-polys').textContent = Math.round(polys).toLocaleString();
+            document.getElementById('stat-verts').textContent = Math.round(verts).toLocaleString();
+        }
+
+        // --- 3. AI TEXT-TO-3D GENERATOR (GEMINI 2.5 INTEGRATION) ---
+        async function generateAI3DModel() {
+            const promptInput = document.getElementById('ai-prompt').value.trim();
+            const style = document.getElementById('ai-style').value;
+
+            if (!promptInput) {
+                showToast("Please enter a text prompt to generate a 3D model", "warning");
+                return;
+            }
+
+            const statusCard = document.getElementById('ai-status-card');
+            const statusText = document.getElementById('ai-status-text');
+            const statusSub = document.getElementById('ai-status-sub');
+
+            statusCard.classList.remove('hidden');
+            statusText.textContent = "Connecting to Gemini 3D Engine...";
+            statusSub.textContent = "Synthesizing procedural THREE.js code...";
+
+            const systemInstruction = `You are a high-level 3D procedural modeling engine. 
+Generate clean executable JavaScript code that builds a detailed 3D model using Three.js inside a given variable named 'group' (which is a THREE.Group).
+Use 'THREE' for all Three.js classes. Create multiple Mesh parts (cubes, cylinders, spheres, cones, extrusions) with proper relative positions, rotations, and scales to create a recognizable, complex model matching the user request.
+Do NOT create camera, scene, or renderers. ONLY append meshes to 'group'.
+Assign standard materials using THREE.MeshStandardMaterial({ color: 0xHEX, roughness: 0.3, metalness: 0.5, flatShading: true }).
+
+Response must be strictly raw JSON with schema:
+{
+  "title": "Model Name",
+  "code": "JavaScript string here"
+}`;
+
+            const userContent = `User Prompt: "${promptInput}". Style Target: ${style}.`;
+
+            try {
+                // Call Gemini API with Exponential Backoff retry logic
+                const responseData = await fetchGeminiWithBackoff({
+                    contents: [{ parts: [{ text: userContent }] }],
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
+                    generationConfig: {
+                        responseMimeType: "application/json"
+                    }
+                });
+
+                statusText.textContent = "Compiling 3D Geometry...";
+                
+                let resultJson;
+                try {
+                    const responseText = responseData.candidates[0].content.parts[0].text;
+                    resultJson = JSON.parse(responseText);
+                } catch (e) {
+                    throw new Error("Failed to parse AI 3D structural payload.");
+                }
+
+                if (resultJson && resultJson.code) {
+                    // Clear current group
+                    clearCurrentModel();
+
+                    // Safely execute generated Three.js procedural script
+                    const builderFunction = new Function('group', 'THREE', resultJson.code);
+                    builderFunction(currentMeshGroup, THREE);
+
+                    // Position and scale nicely
+                    fitModelToViewport();
+                    recalculateMeshStats();
+
+                    showToast(`Generated 3D Model: ${resultJson.title || "Custom Asset"}`, "success");
+                } else {
+                    throw new Error("Invalid geometry code returned.");
+                }
+
+            } catch (err) {
+                console.error("AI Generation Error:", err);
+                showToast("AI synthesis failed. Falling back to Procedural Engine.", "error");
+                // Fallback to offline procedural spaceship
+                generateProceduralAsset('spaceship');
+            } finally {
+                statusCard.classList.add('hidden');
+            }
+        }
+
+        async function fetchGeminiWithBackoff(payload) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            const delays = [1000, 2000, 4000, 8000, 16000];
+
+            for (let attempt = 0; attempt <= delays.length; attempt++) {
+                try {
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                        return await res.json();
+                    }
+                } catch (err) {
+                    if (attempt === delays.length) throw err;
+                }
+                if (attempt < delays.length) {
+                    await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+                }
+            }
+            throw new Error("API Max retries exceeded");
+        }
+
+        // --- 4. OFFLINE PROCEDURAL GENERATORS ---
+        function clearCurrentModel() {
+            while (currentMeshGroup.children.length > 0) {
+                const obj = currentMeshGroup.children[0];
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                    else obj.material.dispose();
+                }
+                currentMeshGroup.remove(obj);
+            }
+            currentMeshGroup.position.set(0, 0, 0);
+            currentMeshGroup.rotation.set(0, 0, 0);
+            currentMeshGroup.scale.set(1, 1, 1);
+        }
+
+        function generateProceduralAsset(type) {
+            clearCurrentModel();
+            const mat = getActiveMaterial();
+            const pseudoRandom = (offset = 0) => {
+                const x = Math.sin(state.seed + offset) * 10000;
+                return x - Math.floor(x);
+            };
+
+            if (type === 'spaceship') {
+                // Fuselage
+                const bodyGeom = new THREE.ConeGeometry(0.8, 4, 6);
+                bodyGeom.rotateX(Math.PI / 2);
+                const body = new THREE.Mesh(bodyGeom, mat);
+                currentMeshGroup.add(body);
+
+                // Wings
+                const wingShape = new THREE.Shape();
+                wingShape.moveTo(0, 0);
+                wingShape.lineTo(2.5, -1);
+                wingShape.lineTo(2.2, -2);
+                wingShape.lineTo(0, -1);
+                const extrudeSettings = { depth: 0.1, bevelEnabled: true, bevelThickness: 0.05 };
+                const wingGeom = new THREE.ExtrudeGeometry(wingShape, extrudeSettings);
+                wingGeom.rotateX(Math.PI / 2);
+                
+                const leftWing = new THREE.Mesh(wingGeom, mat);
+                leftWing.position.set(0, 0, 0.5);
+                currentMeshGroup.add(leftWing);
+
+                // Thrusters
+                for (let i = -0.5; i <= 0.5; i += 1) {
+                    const thruster = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.35, 1, 8), mat);
+                    thruster.rotateX(Math.PI / 2);
+                    thruster.position.set(i, 0, -2);
+                    currentMeshGroup.add(thruster);
+                }
+
+                // Cockpit Canopy
+                const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.45, 8, 8), new THREE.MeshStandardMaterial({
+                    color: 0x06b6d4, roughness: 0.1, metalness: 0.9
+                }));
+                canopy.scale.set(1, 0.7, 1.8);
+                canopy.position.set(0, 0.4, 0.3);
+                currentMeshGroup.add(canopy);
+
+            } else if (type === 'mech') {
+                // Torso
+                const torso = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.8, 1.2), mat);
+                torso.position.y = 2.5;
+                currentMeshGroup.add(torso);
+
+                // Head
+                const head = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.8), mat);
+                head.position.y = 3.8;
+                currentMeshGroup.add(head);
+
+                // Visor
+                const visor = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.2, 0.2), new THREE.MeshBasicMaterial({ color: 0xa855f7 }));
+                visor.position.set(0, 3.85, 0.4);
+                currentMeshGroup.add(visor);
+
+                // Arms & Legs
+                [-1.2, 1.2].forEach(x => {
+                    // Arm
+                    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 2, 6), mat);
+                    arm.position.set(x, 2.3, 0);
+                    currentMeshGroup.add(arm);
+
+                    // Leg
+                    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.3, 2.2, 6), mat);
+                    leg.position.set(x * 0.5, 0.9, 0);
+                    currentMeshGroup.add(leg);
+                });
+
+            } else if (type === 'tree') {
+                // Trunk
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 2, 7), new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 }));
+                trunk.position.y = 1;
+                currentMeshGroup.add(trunk);
+
+                // Foliage Cones
+                const leafMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.6, flatShading: true });
+                for (let i = 0; i < 3; i++) {
+                    const cone = new THREE.Mesh(new THREE.ConeGeometry(1.8 - i * 0.4, 1.8, 7), leafMat);
+                    cone.position.y = 2 + i * 1.1;
+                    currentMeshGroup.add(cone);
+                }
+
+            } else if (type === 'crystal') {
+                const count = 9;
+                for (let i = 0; i < count; i++) {
+                    const height = 1.5 + pseudoRandom(i) * 2.5;
+                    const radius = 0.3 + pseudoRandom(i + 1) * 0.3;
+                    const geom = new THREE.ConeGeometry(radius, height, 5);
+                    const crystalMat = new THREE.MeshStandardMaterial({
+                        color: new THREE.Color().setHSL(pseudoRandom(i + 2), 0.8, 0.5),
+                        roughness: 0.1,
+                        metalness: 0.2
+                    });
+                    const crystal = new THREE.Mesh(geom, crystalMat);
+                    crystal.position.set((pseudoRandom(i + 3) - 0.5) * 1.8, height / 2, (pseudoRandom(i + 4) - 0.5) * 1.8);
+                    crystal.rotation.set((pseudoRandom(i + 5) - 0.5) * 0.4, pseudoRandom(i + 6) * Math.PI, (pseudoRandom(i + 7) - 0.5) * 0.4);
+                    currentMeshGroup.add(crystal);
+                }
+
+            } else if (type === 'city') {
+                for (let x = -2; x <= 2; x += 1.2) {
+                    for (let z = -2; z <= 2; z += 1.2) {
+                        const h = 0.8 + pseudoRandom(x * 10 + z) * 3.5;
+                        const building = new THREE.Mesh(new THREE.BoxGeometry(0.9, h, 0.9), mat);
+                        building.position.set(x, h / 2, z);
+                        currentMeshGroup.add(building);
+                    }
+                }
+            } else if (type === 'terrain') {
+                const geom = new THREE.PlaneGeometry(6, 6, 24, 24);
+                geom.rotateX(-Math.PI / 2);
+                const pos = geom.attributes.position;
+                for (let i = 0; i < pos.count; i++) {
+                    const vx = pos.getX(i);
+                    const vz = pos.getZ(i);
+                    const dist = Math.sqrt(vx * vx + vz * vz);
+                    const height = Math.sin(vx * 1.2) * Math.cos(vz * 1.2) * 0.8 + Math.sin(dist * 2) * 0.4;
+                    pos.setY(i, height);
+                }
+                geom.computeVertexNormals();
+                const terrain = new THREE.Mesh(geom, mat);
+                currentMeshGroup.add(terrain);
+            }
+
+            fitModelToViewport();
+            recalculateMeshStats();
+            showToast(`Generated Procedural ${type.toUpperCase()}`, "info");
+        }
+
+        function fitModelToViewport() {
+            const box = new THREE.Box3().setFromObject(currentMeshGroup);
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+
+            // Center group
+            currentMeshGroup.position.x = -center.x;
+            currentMeshGroup.position.y = -box.min.y; // Sit nicely on floor grid
+            currentMeshGroup.position.z = -center.z;
+
+            // Reset camera target
+            controls.target.set(0, size.y / 2, 0);
+        }
+
+        // --- 5. 2D SKETCH TO 3D EXTRUDER ---
+        let sketchCanvas, sketchCtx, isDrawing = false, sketchPoints = [];
+
+        function initDrawingCanvas() {
+            sketchCanvas = document.getElementById('sketch-canvas');
+            sketchCtx = sketchCanvas.getContext('2d');
+            
+            // Clear background
+            sketchCtx.fillStyle = '#020617';
+            sketchCtx.fillRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+
+            // Draw hint
+            drawCanvasGrid();
+
+            // Canvas Drawing Events
+            sketchCanvas.addEventListener('pointerdown', (e) => {
+                isDrawing = true;
+                sketchPoints = [];
+                const rect = sketchCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                sketchPoints.push({ x, y });
+                sketchCtx.clearRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+                drawCanvasGrid();
+                sketchCtx.beginPath();
+                sketchCtx.strokeStyle = '#6366f1';
+                sketchCtx.lineWidth = 3;
+                sketchCtx.moveTo(x, y);
+            });
+
+            sketchCanvas.addEventListener('pointermove', (e) => {
+                if (!isDrawing) return;
+                const rect = sketchCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                sketchPoints.push({ x, y });
+                sketchCtx.lineTo(x, y);
+                sketchCtx.stroke();
+            });
+
+            window.addEventListener('pointerup', () => {
+                if (isDrawing) {
+                    isDrawing = false;
+                    sketchCtx.closePath();
+                    sketchCtx.fillStyle = 'rgba(99, 102, 241, 0.2)';
+                    sketchCtx.fill();
+                }
+            });
+
+            document.getElementById('btn-clear-canvas').addEventListener('click', () => {
+                sketchPoints = [];
+                sketchCtx.fillRect(0, 0, sketchCanvas.width, sketchCanvas.height);
+                drawCanvasGrid();
+            });
+        }
+
+        function drawCanvasGrid() {
+            sketchCtx.strokeStyle = '#1e2638';
+            sketchCtx.lineWidth = 1;
+            for (let i = 0; i < sketchCanvas.width; i += 20) {
+                sketchCtx.beginPath();
+                sketchCtx.moveTo(i, 0);
+                sketchCtx.lineTo(i, sketchCanvas.height);
+                sketchCtx.stroke();
+            }
+            for (let j = 0; j < sketchCanvas.height; j += 20) {
+                sketchCtx.beginPath();
+                sketchCtx.moveTo(0, j);
+                sketchCtx.lineTo(sketchCanvas.width, j);
+                sketchCtx.stroke();
+            }
+        }
+
+        function extrudeSketchTo3D() {
+            if (sketchPoints.length < 3) {
+                showToast("Please draw a 2D loop shape on canvas first", "warning");
+                return;
+            }
+
+            clearCurrentModel();
+            const shape = new THREE.Shape();
+            const scale = 0.02;
+            const centerX = sketchCanvas.width / 2;
+            const centerY = sketchCanvas.height / 2;
+
+            shape.moveTo((sketchPoints[0].x - centerX) * scale, -(sketchPoints[0].y - centerY) * scale);
+            for (let i = 1; i < sketchPoints.length; i++) {
+                shape.lineTo((sketchPoints[i].x - centerX) * scale, -(sketchPoints[i].y - centerY) * scale);
+            }
+
+            const depth = parseFloat(document.getElementById('extrude-depth').value);
+            const bevel = parseFloat(document.getElementById('extrude-bevel').value);
+
+            const extrudeSettings = {
+                depth: depth,
+                bevelEnabled: bevel > 0,
+                bevelSegments: 3,
+                steps: 1,
+                bevelSize: bevel,
+                bevelThickness: bevel
+            };
+
+            const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            const mesh = new THREE.Mesh(geom, getActiveMaterial());
+            currentMeshGroup.add(mesh);
+
+            fitModelToViewport();
+            recalculateMeshStats();
+            showToast("Created 3D Extruded Mesh from Sketch", "success");
+        }
+
+        // --- 6. EXPORT CAPABILITIES ---
+        function exportOBJ() {
+            if (!currentMeshGroup || currentMeshGroup.children.length === 0) {
+                showToast("No 3D mesh available to export", "warning");
+                return;
+            }
+            const exporter = new THREE.OBJExporter();
+            const result = exporter.parse(currentMeshGroup);
+            downloadFile(result, 'nova-3d-model.obj', 'text/plain');
+            showToast("Exported .OBJ model successfully", "success");
+        }
+
+        function exportSTL() {
+            if (!currentMeshGroup || currentMeshGroup.children.length === 0) {
+                showToast("No 3D mesh available to export", "warning");
+                return;
+            }
+            const exporter = new THREE.STLExporter();
+            const result = exporter.parse(currentMeshGroup, { binary: true });
+            downloadFile(new Blob([result], { type: 'application/octet-stream' }), 'nova-3d-model.stl', 'application/octet-stream');
+            showToast("Exported .STL model for 3D printing", "success");
+        }
+
+        function captureScreenshot() {
+            renderer.render(scene, camera);
+            const dataUrl = renderer.domElement.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = 'nova-3d-render.png';
+            link.href = dataUrl;
+            link.click();
+            showToast("Viewport snapshot saved", "info");
+        }
+
+        function downloadFile(content, fileName, mimeType) {
+            const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = fileName;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+
+        // --- 7. EVENT LISTENERS & UI BINDINGS ---
+        function initUIListeners() {
+            // Tab switching
+            document.querySelectorAll('.tool-tab').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetTab = btn.getAttribute('data-tab');
+                    
+                    // Activate button style
+                    document.querySelectorAll('.tool-tab').forEach(b => {
+                        b.classList.remove('text-indigo-400', 'bg-indigo-500/10');
+                        b.classList.add('text-slate-400');
+                    });
+                    btn.classList.add('text-indigo-400', 'bg-indigo-500/10');
+                    btn.classList.remove('text-slate-400');
+
+                    // Show panel
+                    document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
+                    document.getElementById(targetTab).classList.remove('hidden');
+                });
+            });
+
+            // Prompt tags
+            document.querySelectorAll('.prompt-tag').forEach(tag => {
+                tag.addEventListener('click', () => {
+                    document.getElementById('ai-prompt').value = tag.textContent;
+                });
+            });
+
+            // AI Generate button
+            document.getElementById('btn-generate-ai').addEventListener('click', generateAI3DModel);
+
+            // Procedural buttons
+            document.querySelectorAll('.proc-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const procType = btn.getAttribute('data-proc');
+                    generateProceduralAsset(procType);
+                });
+            });
+
+            document.getElementById('btn-random-seed').addEventListener('click', () => {
+                state.seed = Math.floor(Math.random() * 99999);
+                document.getElementById('proc-seed').value = state.seed;
+                showToast(`Mutated Seed: ${state.seed}`, "info");
+            });
+
+            // Extrude sketch button
+            document.getElementById('btn-extrude-mesh').addEventListener('click', extrudeSketchTo3D);
+            document.getElementById('extrude-depth').addEventListener('input', (e) => {
+                document.getElementById('extrude-depth-val').textContent = e.target.value;
+            });
+            document.getElementById('extrude-bevel').addEventListener('input', (e) => {
+                document.getElementById('extrude-bevel-val').textContent = e.target.value;
+            });
+
+            // Material bindings
+            document.getElementById('mat-color').addEventListener('input', (e) => {
+                state.materialProps.color = e.target.value;
+                updateSceneMaterials();
+            });
+            document.getElementById('mat-roughness').addEventListener('input', (e) => {
+                state.materialProps.roughness = parseFloat(e.target.value);
+                document.getElementById('mat-roughness-val').textContent = state.materialProps.roughness.toFixed(2);
+                updateSceneMaterials();
+            });
+            document.getElementById('mat-metalness').addEventListener('input', (e) => {
+                state.materialProps.metalness = parseFloat(e.target.value);
+                document.getElementById('mat-metalness-val').textContent = state.materialProps.metalness.toFixed(2);
+                updateSceneMaterials();
+            });
+            document.getElementById('mat-wireframe').addEventListener('change', (e) => {
+                state.materialProps.wireframe = e.target.checked;
+                updateSceneMaterials();
+            });
+            document.getElementById('mat-flatshading').addEventListener('change', (e) => {
+                state.materialProps.flatShading = e.target.checked;
+                updateSceneMaterials();
+            });
+
+            // Material presets
+            document.querySelectorAll('.mat-preset').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const preset = btn.getAttribute('data-mat');
+                    if (preset === 'gold') {
+                        state.materialProps = { color: '#f59e0b', roughness: 0.2, metalness: 0.9, wireframe: false, flatShading: true };
+                    } else if (preset === 'chrome') {
+                        state.materialProps = { color: '#e2e8f0', roughness: 0.05, metalness: 0.98, wireframe: false, flatShading: false };
+                    } else if (preset === 'hologram') {
+                        state.materialProps = { color: '#06b6d4', roughness: 0.1, metalness: 0.1, wireframe: true, flatShading: true };
+                    } else if (preset === 'clay') {
+                        state.materialProps = { color: '#f43f5e', roughness: 0.9, metalness: 0.0, wireframe: false, flatShading: true };
+                    } else if (preset === 'glass') {
+                        state.materialProps = { color: '#38bdf8', roughness: 0.1, metalness: 0.1, wireframe: false, flatShading: false };
+                    } else if (preset === 'obsidian') {
+                        state.materialProps = { color: '#1e1b4b', roughness: 0.15, metalness: 0.85, wireframe: false, flatShading: true };
+                    }
+
+                    document.getElementById('mat-color').value = state.materialProps.color;
+                    document.getElementById('mat-roughness').value = state.materialProps.roughness;
+                    document.getElementById('mat-roughness-val').textContent = state.materialProps.roughness.toFixed(2);
+                    document.getElementById('mat-metalness').value = state.materialProps.metalness;
+                    document.getElementById('mat-metalness-val').textContent = state.materialProps.metalness.toFixed(2);
+                    document.getElementById('mat-wireframe').checked = state.materialProps.wireframe;
+                    document.getElementById('mat-flatshading').checked = state.materialProps.flatShading;
+
+                    updateSceneMaterials();
+                });
+            });
+
+            // Lighting & Grid bindings
+            document.getElementById('env-grid').addEventListener('change', (e) => {
+                gridHelper.visible = e.target.checked;
+            });
+            document.getElementById('env-shadows').addEventListener('change', (e) => {
+                renderer.shadowMap.enabled = e.target.checked;
+            });
+            document.getElementById('env-intensity').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                document.getElementById('env-intensity-val').textContent = val.toFixed(1);
+                if (mainLight) mainLight.intensity = val;
+            });
+
+            document.querySelectorAll('.env-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const env = btn.getAttribute('data-env');
+                    if (env === 'studio') {
+                        scene.background = new THREE.Color(0x0b0f17);
+                        mainLight.color.setHex(0xffffff);
+                        fillLight.color.setHex(0x818cf8);
+                    } else if (env === 'cyber') {
+                        scene.background = new THREE.Color(0x030712);
+                        mainLight.color.setHex(0x06b6d4);
+                        fillLight.color.setHex(0xa855f7);
+                    } else if (env === 'sunset') {
+                        scene.background = new THREE.Color(0x1c051a);
+                        mainLight.color.setHex(0xf97316);
+                        fillLight.color.setHex(0xe11d48);
+                    }
+                });
+            });
+
+            // Viewport & Transform Controls
+            document.getElementById('transform-scale').addEventListener('input', (e) => {
+                const s = parseFloat(e.target.value);
+                document.getElementById('transform-scale-val').textContent = s.toFixed(1) + 'x';
+                currentMeshGroup.scale.set(s, s, s);
+            });
+
+            document.getElementById('transform-rot-y').addEventListener('input', (e) => {
+                const deg = parseFloat(e.target.value);
+                currentMeshGroup.rotation.y = deg * Math.PI / 180;
+            });
+
+            document.getElementById('transform-pos-y').addEventListener('input', (e) => {
+                const y = parseFloat(e.target.value);
+                currentMeshGroup.position.y = y;
+            });
+
+            document.getElementById('btn-auto-rotate').addEventListener('click', () => {
+                state.autoRotate = !state.autoRotate;
+                const btn = document.getElementById('btn-auto-rotate');
+                if (state.autoRotate) {
+                    btn.classList.add('bg-indigo-600/40', 'border-indigo-500');
+                } else {
+                    btn.classList.remove('bg-indigo-600/40', 'border-indigo-500');
+                }
+            });
+
+            document.getElementById('btn-view-reset').addEventListener('click', () => {
+                camera.position.set(5, 4, 7);
+                controls.target.set(0, 1, 0);
+            });
+
+            document.getElementById('btn-toggle-wireframe').addEventListener('click', () => {
+                state.materialProps.wireframe = !state.materialProps.wireframe;
+                document.getElementById('mat-wireframe').checked = state.materialProps.wireframe;
+                updateSceneMaterials();
+            });
+
+            // Camera presets
+            document.querySelectorAll('.cam-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const view = btn.getAttribute('data-cam');
+                    if (view === 'front') camera.position.set(0, 1, 8);
+                    else if (view === 'top') camera.position.set(0, 10, 0.1);
+                    else if (view === 'iso') camera.position.set(5, 4, 7);
+                    controls.target.set(0, 1, 0);
+                });
+            });
+
+            // Exporters
+            document.getElementById('btn-export-obj').addEventListener('click', exportOBJ);
+            document.getElementById('btn-export-stl').addEventListener('click', exportSTL);
+            document.getElementById('btn-screenshot').addEventListener('click', captureScreenshot);
+        }
+
+        // Custom Toast Notifications (Replaces standard browser alert)
+        function showToast(message, type = "info") {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            let borderClass = "border-indigo-500/50";
+            let icon = "info";
+            if (type === "success") { borderClass = "border-emerald-500/50"; icon = "check-circle"; }
+            else if (type === "warning") { borderClass = "border-amber-500/50"; icon = "alert-triangle"; }
+            else if (type === "error") { borderClass = "border-rose-500/50"; icon = "alert-octagon"; }
+
+            toast.className = `pointer-events-auto flex items-center space-x-2 bg-studio-800/90 border ${borderClass} text-slate-100 text-xs px-3.5 py-2.5 rounded-xl shadow-xl backdrop-blur transition-all duration-300 transform translate-y-2 opacity-0`;
+            toast.innerHTML = `<i data-lucide="${icon}" class="w-4 h-4 text-indigo-400"></i><span>${message}</span>`;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-2');
+                setTimeout(() => toast.remove(), 300);
+            }, 3500);
+        }
+    </script>
+</body>
+</html>
